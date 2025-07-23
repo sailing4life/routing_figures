@@ -46,6 +46,15 @@ if uploaded_file:
     else:
         start_time = end_time = "?"
 
+    
+    # === Model info from rows ===
+    model_row = next((row for row in rows if any("model" in cell.lower() for cell in row if cell.strip())), None)
+    model_name = ""
+    if model_row:
+        non_empty_cells = [cell.strip() for cell in model_row if cell.strip()]
+        if len(non_empty_cells) > 1:
+            model_name = non_empty_cells[1]
+            
     # === Helper: plot TWD ===
     def plot_twd(df):
         dir_bins = np.arange(0, 361, 10)
@@ -97,6 +106,8 @@ if uploaded_file:
         ax.set_rgrids(rgrid_ticks, angle=90)
         ax.set_ylim(0, ylim)
         ax.set_title(f"TWD vs TWS (% Time Sailed)\n{start_time} to {end_time}", va='bottom')
+        if model_name:
+            title_str += f"\n{model_name}"
         ax.legend(title="TWS", loc="upper right", bbox_to_anchor=(1.2, 1.02))
         return fig
 
