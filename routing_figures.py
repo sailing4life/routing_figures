@@ -24,8 +24,17 @@ if uploaded_file:
 
     # === Parse fields ===
     df["Twa"] = pd.to_numeric(df.get("Twa", np.nan), errors="coerce")
-    df["Twd°M"] = pd.to_numeric(df.get("Twd°M", np.nan), errors="coerce")
     df["Tws"] = pd.to_numeric(df.get("Tws", np.nan), errors="coerce")
+
+    # Detect TWD column
+    twd_col_candidates = [col for col in df.columns if "twd" in col.lower()]
+    if twd_col_candidates:
+        twd_col = twd_col_candidates[0]
+        df["Twd°M"] = pd.to_numeric(df[twd_col], errors="coerce")
+    else:
+        st.warning("No TWD column found in the CSV.")
+        df["Twd°M"] = np.nan
+
     df = df.dropna(subset=["Twa", "Twd°M", "Tws"])
 
     # === Time info ===
