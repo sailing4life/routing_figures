@@ -74,7 +74,7 @@ if uploaded_file:
         max_percent = np.ceil((total_percent + 1).max())
         ylim = int(np.ceil((max_percent + 2) / 2.0) * 2)
         rgrid_ticks = list(range(2, ylim + 1, 2))
-        colors = ["#add8e6", "#9bddde", "#7fcdbb", "#66c2a5", "#90ee90", "#f0e68c", "#ffcccb", "#ffcc99"]
+        colors = ["#add8e6", "#9bddde", "#7fcdbb", "#66c2a5", "#90ee90", "#f0e68c", "#ffcc99", "#ffcccb"]
 
         fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(8, 7))
         ax.set_theta_zero_location("N")
@@ -97,7 +97,7 @@ if uploaded_file:
             bottom += heights
 
         for angle, total in zip(angles, total_percent):
-            if total >= 5:
+            if total >= 3:
                 ax.text(angle, total + 1, f"{int(round(total))}%", ha='center', va='bottom', fontsize=9, fontweight='bold')
 
         ax.set_xticks(np.deg2rad(np.arange(0, 360, 30)))
@@ -108,62 +108,6 @@ if uploaded_file:
         if model_name:
             title_str += f"\n{model_name}"
         ax.set_title(title_str, va='bottom')
-        ax.legend(title="TWS", loc="upper right", bbox_to_anchor=(1.2, 1.02))
-        return fig
-
-    # === Helper: plot TWA ===
-    def plot_twa(df):
-        bins = np.linspace(-180, 180, 37)
-        angles = np.deg2rad((bins[:-1] + bins[1:]) / 2)
-
-        tws_bins = np.arange(0, 36, 4)
-        tws_labels = [f"{tws_bins[i]}–{tws_bins[i+1]} kt" for i in range(len(tws_bins)-1)]
-
-        df = df.copy()
-        df["twa_bin"] = pd.cut(df["Twa"], bins=bins, labels=False, include_lowest=True)
-        df["tws_bin"] = pd.cut(df["Tws"], bins=tws_bins, labels=tws_labels, include_lowest=True)
-
-        counts = df.groupby(["twa_bin", "tws_bin"]).size().unstack(fill_value=0)
-        percentages = counts.reindex(index=np.arange(len(bins)-1), fill_value=0)
-        percentages = percentages / percentages.values.sum() * 100
-
-        total_percent = percentages.sum(axis=1).values
-        max_percent = np.ceil((total_percent + 1).max())
-        ylim = int(np.ceil((max_percent + 2) / 2.0) * 2)
-        rgrid_ticks = list(range(2, ylim + 1, 2))
-        colors = ["#add8e6", "#9bddde", "#7fcdbb", "#66c2a5", "#90ee90", "#f0e68c", "#ffcccb", "#ffcc99"]
-
-        fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(8, 7))
-        ax.set_theta_zero_location("S")
-        ax.set_theta_direction(-1)
-
-        width = np.deg2rad(10)
-        bottom = np.zeros(len(angles))
-        for i, label in enumerate(tws_labels):
-            heights = percentages[label].values if label in percentages.columns else np.zeros(len(angles))
-            ax.bar(angles, heights, width=width, bottom=bottom,
-                   color=colors[i % len(colors)], edgecolor='black', linewidth=0.5, label=label)
-            bottom += heights
-
-        bottom = np.zeros(len(angles))
-        for i, label in enumerate(tws_labels):
-            heights = percentages[label].values if label in percentages.columns else np.zeros(len(angles))
-            for angle, h, b in zip(angles, heights, bottom):
-                if h >= 1:
-                    ax.text(angle, b + h / 2, f"{int(round(h))}%", ha='center', va='center', fontsize=8)
-            bottom += heights
-
-        for angle, total in zip(angles, total_percent):
-            if total >= 5:
-                ax.text(angle, total + 1, f"{int(round(total))}%", ha='center', va='bottom', fontsize=9, fontweight='bold')
-
-        tick_angles = np.arange(0, 361, 30)
-        tick_labels = [f"{int(x - 180)}°" for x in tick_angles]
-        ax.set_xticks(np.deg2rad(tick_angles))
-        ax.set_xticklabels(tick_labels)
-        ax.set_rgrids(rgrid_ticks, angle=90)
-        ax.set_ylim(0, ylim)
-        ax.set_title(f"TWA vs TWS (% Time Sailed)\n{start_time} to {end_time}", va='bottom')
         ax.legend(title="TWS", loc="upper right", bbox_to_anchor=(1.2, 1.02))
         return fig
 
@@ -178,7 +122,7 @@ if uploaded_file:
 
     # === Time Series Plot ===
     if time_col:
-        fig, ax1 = plt.subplots(figsize=(10, 4))
+        fig, ax1 = plt.subplots(figsize=(12, 9))
 
         ax1.plot(df[time_col], df["Tws"], color='blue', label='TWS')
         ax1.set_ylabel("TWS (kt)", color='blue')
