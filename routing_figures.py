@@ -178,7 +178,7 @@ if uploaded_file:
 
     # === Time Series Plot ===
     if time_col:
-        fig, ax1 = plt.subplots(figsize=(12, 9))
+        fig, ax1 = plt.subplots(figsize=(16, 9))
 
         ax1.plot(df[time_col], df["Tws"], color='blue', label='TWS')
         ax1.set_ylabel("TWS (kt)", color='blue')
