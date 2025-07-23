@@ -210,9 +210,10 @@ if uploaded_file:
                     last_mark = m
 
         title_str = "TWS/TWD Time Series"
+        title_str += \n{start_time} to {end_time}"
         if model_name:
             title_str += f"\n Model: {model_name}"
-        plt.title(title_str)
+        ax.set_title(title_str)
         st.pyplot(fig)
 else:
     st.info("Upload a CSV file to begin.")
