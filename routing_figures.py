@@ -71,7 +71,7 @@ if uploaded_file:
         percentages = percentages / percentages.values.sum() * 100
 
         total_percent = percentages.sum(axis=1).values
-        max_percent = np.ceil((total_percent + 1).max())
+        max_percent = np.ceil((total_percent).max())
         ylim = int(np.ceil((max_percent + 2) / 2.0) * 2)
         rgrid_ticks = list(range(2, ylim + 1, 2))
         colors = ["#add8e6", "#9bddde", "#7fcdbb", "#66c2a5", "#90ee90", "#f0e68c", "#ffcc99", "#ffcccb"]
@@ -128,7 +128,7 @@ if uploaded_file:
         percentages = percentages / percentages.values.sum() * 100
 
         total_percent = percentages.sum(axis=1).values
-        max_percent = np.ceil((total_percent + 1).max())
+        max_percent = np.ceil((total_percent).max())
         ylim = int(np.ceil((max_percent + 2) / 2.0) * 2)
         rgrid_ticks = list(range(2, ylim + 1, 2))
         colors = ["#add8e6", "#9bddde", "#7fcdbb", "#66c2a5", "#90ee90", "#f0e68c", "#ffcc99", "#ffcccb"]
