@@ -66,7 +66,7 @@ if uploaded_file:
         max_percent = np.ceil((total_percent + 1).max())
         ylim = int(np.ceil((max_percent + 2) / 2.0) * 2)
         rgrid_ticks = list(range(2, ylim + 1, 2))
-        colors = ["#add8e6", "#9bddde", "#7fcdbb", "#66c2a5", "#90ee90", "#f0e68c", "#ffcccb", "#ffcc99"]
+        colors = ["#add8e6", "#9bddde", "#7fcdbb", "#66c2a5", "#90ee90", "#f0e68c", "#ffcc99","#ffcccb"]
 
         fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(8, 7))
         ax.set_theta_zero_location("N")
@@ -89,7 +89,7 @@ if uploaded_file:
             bottom += heights
 
         for angle, total in zip(angles, total_percent):
-            if total >= 5:
+            if total >= 4:
                 ax.text(angle, total + 1, f"{int(round(total))}%", ha='center', va='bottom', fontsize=9, fontweight='bold')
 
         ax.set_xticks(np.deg2rad(np.arange(0, 360, 30)))
@@ -120,7 +120,7 @@ if uploaded_file:
         max_percent = np.ceil((total_percent + 1).max())
         ylim = int(np.ceil((max_percent + 2) / 2.0) * 2)
         rgrid_ticks = list(range(2, ylim + 1, 2))
-        colors = ["#add8e6", "#9bddde", "#7fcdbb", "#66c2a5", "#90ee90", "#f0e68c", "#ffcccb", "#ffcc99"]
+        colors = ["#add8e6", "#9bddde", "#7fcdbb", "#66c2a5", "#90ee90", "#f0e68c", "#ffcc99","#ffcccb"]
 
         fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(8, 7))
         ax.set_theta_zero_location("S")
@@ -143,7 +143,7 @@ if uploaded_file:
             bottom += heights
 
         for angle, total in zip(angles, total_percent):
-            if total >= 5:
+            if total >= 4:
                 ax.text(angle, total + 1, f"{int(round(total))}%", ha='center', va='bottom', fontsize=9, fontweight='bold')
 
         tick_angles = np.arange(0, 361, 30)
