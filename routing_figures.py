@@ -163,9 +163,10 @@ if uploaded_file:
         ax.set_xticklabels(tick_labels)
         ax.set_rgrids(rgrid_ticks, angle=90)
         ax.set_ylim(0, ylim)
-        ax.set_title(f"TWA vs TWS (% Time Sailed)\n{start_time} to {end_time}", va='bottom')
+        title_str = f"TWA vs TWS (% Time Sailed)\n{start_time} to {end_time}"
         if model_name:
             title_str += f"\n Model: {model_name}"
+        ax.set_title(title_str, va='bottom')
         ax.legend(title="TWS", loc="upper right", bbox_to_anchor=(1.2, 1.02))
         return fig
 
