@@ -210,7 +210,7 @@ if uploaded_file:
                     last_mark = m
 
         title_str = "TWS/TWD Time Series"
-        title_str += \n{start_time} to {end_time}"
+        title_str += f"\n{start_time} to {end_time}"
         if model_name:
             title_str += f"\n Model: {model_name}"
         ax.set_title(title_str)
