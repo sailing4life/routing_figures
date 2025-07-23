@@ -213,7 +213,7 @@ if uploaded_file:
         title_str += f"\n{start_time} to {end_time}"
         if model_name:
             title_str += f"\n Model: {model_name}"
-        ax.set_title(title_str)
+        plt.title(title_str)
         st.pyplot(fig)
 else:
     st.info("Upload a CSV file to begin.")
