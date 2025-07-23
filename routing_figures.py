@@ -71,7 +71,7 @@ if uploaded_file:
         percentages = percentages / percentages.values.sum() * 100
 
         total_percent = percentages.sum(axis=1).values
-        max_percent = np.ceil((total_percent + 1).max())
+        max_percent = np.ceil((total_percent).max())
         ylim = int(np.ceil((max_percent + 2) / 2.0) * 2)
         rgrid_ticks = list(range(2, ylim + 1, 2))
         colors = ["#add8e6", "#9bddde", "#7fcdbb", "#66c2a5", "#90ee90", "#f0e68c", "#ffcccb", "#ffcc99"]
@@ -97,7 +97,7 @@ if uploaded_file:
             bottom += heights
 
         for angle, total in zip(angles, total_percent):
-            if total >= 3:
+            if total >= 4:
                 ax.text(angle, total + 1, f"{int(round(total))}%", ha='center', va='bottom', fontsize=9, fontweight='bold')
 
         ax.set_xticks(np.deg2rad(np.arange(0, 360, 30)))
@@ -106,7 +106,7 @@ if uploaded_file:
         ax.set_ylim(0, ylim)
         title_str = f"TWD vs TWS (% Time Sailed)\n{start_time} to {end_time}"
         if model_name:
-            title_str += f"\n{model_name}"
+            title_str += f"\n Model: {model_name}"
         ax.set_title(title_str, va='bottom')
         ax.legend(title="TWS", loc="upper right", bbox_to_anchor=(1.2, 1.02))
         return fig
@@ -128,7 +128,7 @@ if uploaded_file:
         percentages = percentages / percentages.values.sum() * 100
 
         total_percent = percentages.sum(axis=1).values
-        max_percent = np.ceil((total_percent + 1).max())
+        max_percent = np.ceil((total_percent).max())
         ylim = int(np.ceil((max_percent + 2) / 2.0) * 2)
         rgrid_ticks = list(range(2, ylim + 1, 2))
         colors = ["#add8e6", "#9bddde", "#7fcdbb", "#66c2a5", "#90ee90", "#f0e68c", "#ffcccb", "#ffcc99"]
@@ -154,7 +154,7 @@ if uploaded_file:
             bottom += heights
 
         for angle, total in zip(angles, total_percent):
-            if total >= 3:
+            if total >= 4:
                 ax.text(angle, total + 1, f"{int(round(total))}%", ha='center', va='bottom', fontsize=9, fontweight='bold')
 
         tick_angles = np.arange(0, 361, 30)
@@ -164,6 +164,8 @@ if uploaded_file:
         ax.set_rgrids(rgrid_ticks, angle=90)
         ax.set_ylim(0, ylim)
         ax.set_title(f"TWA vs TWS (% Time Sailed)\n{start_time} to {end_time}", va='bottom')
+        if model_name:
+            title_str += f"\n Model: {model_name}"
         ax.legend(title="TWS", loc="upper right", bbox_to_anchor=(1.2, 1.02))
         return fig
 
@@ -206,7 +208,10 @@ if uploaded_file:
                     ax1.text(t, ax1.get_ylim()[1], str(m), rotation=90, va='top', ha='right', fontsize=8)
                     last_mark = m
 
-        plt.title("TWS/TWD Time Series")
+        title_str = "TWS/TWD Time Series"
+        if model_name:
+            title_str += f"\n Model: {model_name}"
+        plt.title(title_str)
         st.pyplot(fig)
 else:
     st.info("Upload a CSV file to begin.")
