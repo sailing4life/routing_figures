@@ -54,39 +54,6 @@ if uploaded_file:
         if len(non_empty_cells) > 1:
             model_name = non_empty_cells[1]
 
-    # === Data summary ===
-    with st.expander("Data Summary"):
-        st.write("Time Range:", f"{start_time} to {end_time}")
-        st.write("Model:", model_name)
-        st.dataframe(df.describe())
-
-    # === Time Series Plot ===
-    if time_col:
-        fig, ax1 = plt.subplots(figsize=(10, 4))
-
-        ax1.plot(df[time_col], df["Tws"], color='blue', label='TWS')
-        ax1.set_ylabel("TWS (kt)", color='blue')
-        ax1.tick_params(axis='y', labelcolor='blue')
-
-        ax2 = ax1.twinx()
-        ax2.plot(df[time_col], df["Twd°M"], color='red', label='TWD')
-        ax2.set_ylabel("TWD (°)", color='red')
-        ax2.tick_params(axis='y', labelcolor='red')
-
-        # Plot vertical lines for marks if present
-        mark_cols = [col for col in df.columns if "mark" in col.lower()]
-        if mark_cols:
-            mark_col = mark_cols[0]
-            last_mark = None
-            for t, m in zip(df[time_col], df[mark_col]):
-                if pd.notna(m) and m != last_mark:
-                    ax1.axvline(t, color='gray', linestyle='--', alpha=0.5)
-                    ax1.text(t, ax1.get_ylim()[1], str(m), rotation=90, va='top', ha='right', fontsize=8)
-                    last_mark = m
-
-        plt.title("TWS/TWD Time Series")
-        st.pyplot(fig)
-
     # === Helper: plot TWD ===
     def plot_twd(df):
         dir_bins = np.arange(0, 361, 10)
@@ -208,5 +175,38 @@ if uploaded_file:
     with col2:
         st.subheader("TWA vs TWS")
         st.pyplot(plot_twa(df))
+
+    # === Time Series Plot ===
+    if time_col:
+        fig, ax1 = plt.subplots(figsize=(10, 4))
+
+        ax1.plot(df[time_col], df["Tws"], color='blue', label='TWS')
+        ax1.set_ylabel("TWS (kt)", color='blue')
+        ax1.tick_params(axis='y', labelcolor='blue')
+
+        for x, y in zip(df[time_col], df["Tws"]):
+            ax1.text(x, y, f"{int(round(y))}", color='blue', fontsize=7, va='bottom')
+
+        ax2 = ax1.twinx()
+        ax2.plot(df[time_col], df["Twd°M"], color='red', label='TWD')
+        ax2.set_ylabel("TWD (°)", color='red')
+        ax2.tick_params(axis='y', labelcolor='red')
+
+        for x, y in zip(df[time_col], df["Twd°M"]):
+            ax2.text(x, y, f"{int(round(y))}", color='red', fontsize=7, va='top')
+
+        # Plot vertical lines for marks if present
+        mark_cols = [col for col in df.columns if "mark" in col.lower()]
+        if mark_cols:
+            mark_col = mark_cols[0]
+            last_mark = None
+            for t, m in zip(df[time_col], df[mark_col]):
+                if pd.notna(m) and m != last_mark:
+                    ax1.axvline(t, color='gray', linestyle='--', alpha=0.5)
+                    ax1.text(t, ax1.get_ylim()[1], str(m), rotation=90, va='top', ha='right', fontsize=8)
+                    last_mark = m
+
+        plt.title("TWS/TWD Time Series")
+        st.pyplot(fig)
 else:
     st.info("Upload a CSV file to begin.")
