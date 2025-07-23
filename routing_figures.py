@@ -46,7 +46,6 @@ if uploaded_file:
     else:
         start_time = end_time = "?"
 
-    
     # === Model info from rows ===
     model_row = next((row for row in rows if any("model" in cell.lower() for cell in row if cell.strip())), None)
     model_name = ""
@@ -54,7 +53,7 @@ if uploaded_file:
         non_empty_cells = [cell.strip() for cell in model_row if cell.strip()]
         if len(non_empty_cells) > 1:
             model_name = non_empty_cells[1]
-            
+
     # === Helper: plot TWD ===
     def plot_twd(df):
         dir_bins = np.arange(0, 361, 10)
@@ -75,7 +74,7 @@ if uploaded_file:
         max_percent = np.ceil((total_percent + 1).max())
         ylim = int(np.ceil((max_percent + 2) / 2.0) * 2)
         rgrid_ticks = list(range(2, ylim + 1, 2))
-        colors = ["#add8e6", "#9bddde", "#7fcdbb", "#66c2a5", "#90ee90", "#f0e68c", "#ffcc99","#ffcccb"]
+        colors = ["#add8e6", "#9bddde", "#7fcdbb", "#66c2a5", "#90ee90", "#f0e68c", "#ffcccb", "#ffcc99"]
 
         fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(8, 7))
         ax.set_theta_zero_location("N")
@@ -98,16 +97,17 @@ if uploaded_file:
             bottom += heights
 
         for angle, total in zip(angles, total_percent):
-            if total >= 4:
+            if total >= 5:
                 ax.text(angle, total + 1, f"{int(round(total))}%", ha='center', va='bottom', fontsize=9, fontweight='bold')
 
         ax.set_xticks(np.deg2rad(np.arange(0, 360, 30)))
         ax.set_xticklabels([f"{d}°" for d in range(0, 360, 30)])
         ax.set_rgrids(rgrid_ticks, angle=90)
         ax.set_ylim(0, ylim)
-        ax.set_title(f"TWD vs TWS (% Time Sailed)\n{start_time} to {end_time}", va='bottom')
+        title_str = f"TWD vs TWS (% Time Sailed)\n{start_time} to {end_time}"
         if model_name:
             title_str += f"\n{model_name}"
+        ax.set_title(title_str, va='bottom')
         ax.legend(title="TWS", loc="upper right", bbox_to_anchor=(1.2, 1.02))
         return fig
 
@@ -131,7 +131,7 @@ if uploaded_file:
         max_percent = np.ceil((total_percent + 1).max())
         ylim = int(np.ceil((max_percent + 2) / 2.0) * 2)
         rgrid_ticks = list(range(2, ylim + 1, 2))
-        colors = ["#add8e6", "#9bddde", "#7fcdbb", "#66c2a5", "#90ee90", "#f0e68c", "#ffcc99","#ffcccb"]
+        colors = ["#add8e6", "#9bddde", "#7fcdbb", "#66c2a5", "#90ee90", "#f0e68c", "#ffcccb", "#ffcc99"]
 
         fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(8, 7))
         ax.set_theta_zero_location("S")
@@ -154,7 +154,7 @@ if uploaded_file:
             bottom += heights
 
         for angle, total in zip(angles, total_percent):
-            if total >= 4:
+            if total >= 5:
                 ax.text(angle, total + 1, f"{int(round(total))}%", ha='center', va='bottom', fontsize=9, fontweight='bold')
 
         tick_angles = np.arange(0, 361, 30)
