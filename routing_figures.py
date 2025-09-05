@@ -20,8 +20,10 @@ show_total_labels = st.sidebar.checkbox("Show ring total % labels", value=True)
 ring_label_floor = st.sidebar.slider("Label totals above (%)", 0, 20, 6)
 
 st.sidebar.subheader("Time series")
-gap_minutes = st.sidebar.slider("Break line on gaps larger than (minutes)", 15, 360, 120, step=15)
+# If your CSV timestamps are in European style (DD/MM/YYYY or DD-MM-YYYY), leave this checked.
+dayfirst = st.sidebar.checkbox("Date is day-first (DD/MM/YYYY)", value=True)
 label_every = st.sidebar.slider("Annotate every Nth point", 1, 50, 8, step=1)
+gap_minutes = st.sidebar.slider("Break line on gaps larger than (minutes)", 15, 360, 120, step=15)
 
 # === CSV uploader ===
 uploaded_file = st.file_uploader("Upload Expedition routing CSV", type="csv")
@@ -52,7 +54,6 @@ def first_col_containing(df: pd.DataFrame, substrings: list[str]):
 
 
 def detect_model(rows: list[list[str]]) -> str:
-    # Look for a row that has a cell with 'model' and a value next to it
     for row in rows:
         cells = [c.strip() for c in row if c and c.strip()]
         if not cells:
@@ -70,8 +71,8 @@ def parse_numeric(df: pd.DataFrame, col: str) -> pd.Series:
 def format_timerange(ts: pd.Series) -> tuple[str, str]:
     if ts.isna().all():
         return "?", "?"
-    start = pd.to_datetime(ts.min(), errors="coerce")
-    end = pd.to_datetime(ts.max(), errors="coerce")
+    start = pd.to_datetime(ts.min(), errors="coerce", dayfirst=True)
+    end = pd.to_datetime(ts.max(), errors="coerce", dayfirst=True)
     if pd.isna(start) or pd.isna(end):
         return "?", "?"
     return start.strftime("%d-%b-%Y %H:%M"), end.strftime("%d-%b-%Y %H:%M")
