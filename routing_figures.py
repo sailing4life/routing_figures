@@ -238,9 +238,14 @@ if uploaded_file:
     df["Twd°M"] = parse_numeric(df, "Twd°M")
 
     # Time column
-    time_col = first_col_containing(df, ["time", "utc", "date"])  # handles e.g. "TimeUTC"
+    time_col = first_col_containing(df, ["time", "utc", "date"]) # handles e.g. "TimeUTC"
     if time_col:
-        df[time_col] = pd.to_datetime(df[time_col], errors="coerce")
+        # Normalize common separators then parse with explicit dayfirst toggle
+        time_series = df[time_col].astype(str).str.strip()
+        time_series = time_series.replace({"": np.nan})
+        # Replace '.' or '/' with '-' to reduce ambiguity
+        time_series = time_series.str.replace(r"[./]", "-", regex=True)
+        df[time_col] = pd.to_datetime(time_series, errors="coerce", dayfirst=dayfirst, utc=False)
         start_time, end_time = format_timerange(df[time_col])
     else:
         start_time = end_time = "?"
