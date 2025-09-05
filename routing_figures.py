@@ -1,4 +1,4 @@
-fimport streamlit as st
+import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -259,7 +259,7 @@ if uploaded_file:
             buf = io.BytesIO()
             fig_twd.savefig(buf, format='png', dpi=200, bbox_inches='tight')
             st.download_button("Download TWD plot (PNG)", data=buf.getvalue(), file_name="twd_vs_tws.png", mime="image/png")
-        else:
+        elif:
             st.info("Cannot plot TWD vs TWS without a TWD column.")
             buf = io.BytesIO()
             fig_twd.savefig(buf, format='png', dpi=200, bbox_inches='tight')
