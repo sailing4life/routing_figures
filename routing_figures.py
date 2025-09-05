@@ -129,10 +129,16 @@ def wind_polar(
     rgrid_ticks = list(range(2, ylim + 1, 2))
 
     colors = [
-        "#bde0fe", "#a2d2ff", "#90e0ef", "#48cae4",
-        "#00b4d8", "#0096c7", "#0077b6", "#023e8a",
-        "#03045e",
+    "#add8e6",  # light blue
+    "#9bddde",  # teal
+    "#7fcdbb",  # greenish
+    "#66c2a5",  # green
+    "#90ee90",  # light green
+    "#f0e68c",  # khaki
+    "#ffcccb",  # light red
+    "#ffcc99",  # light orange
     ]
+
 
     fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(8, 7))
     if zero_at.upper().startswith("N"):
@@ -327,8 +333,9 @@ if uploaded_file:
             gap_sec = int(gap_minutes * 60)
             dft.loc[dft["_gap_s"] > gap_sec, ["Tws", "Twd°M"]] = np.nan
 
-        ax1.plot(dft[time_col], dft["Tws"], label='TWS')
-        ax1.set_ylabel("TWS (kt)")
+        ax1.plot(dft[time_col], dft["Tws"], color='blue', label='TWS')
+        ax1.set_ylabel("TWS (kt)", color='blue')
+        ax1.tick_params(axis='y', labelcolor='blue')
 
         # Label only every Nth point for readability
         for i, (x, y) in enumerate(zip(dft[time_col], dft["Tws"])):
@@ -337,8 +344,9 @@ if uploaded_file:
 
         ax2 = ax1.twinx()
         if dft["Twd°M"].notna().any():
-            ax2.plot(dft[time_col], dft["Twd°M"], label='TWD')
-            ax2.set_ylabel("TWD (°)")
+            ax2.plot(dft[time_col], dft["Twd°M"], color='red', label='TWD')
+            ax2.set_ylabel("TWD (°)", color='red')
+            ax2.tick_params(axis='y', labelcolor='red')
             for i, (x, y) in enumerate(zip(dft[time_col], dft["Twd°M"])):
                 if pd.notna(y) and (i % int(label_every) == 0):
                     ax2.text(x, y, f"{int(round(y))}", fontsize=7, va='top')
