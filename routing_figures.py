@@ -253,8 +253,14 @@ if uploaded_file:
                 seg_floor=float(segment_label_floor),
                 show_total_labels=show_total_labels,
                 total_floor=float(ring_label_floor),
+                xtick_step_deg=int(xtick_step),
             )
             st.pyplot(fig_twd)
+            buf = io.BytesIO()
+            fig_twd.savefig(buf, format='png', dpi=200, bbox_inches='tight')
+            st.download_button("Download TWD plot (PNG)", data=buf.getvalue(), file_name="twd_vs_tws.png", mime="image/png")
+        else:
+            st.info("Cannot plot TWD vs TWS without a TWD column.")
             buf = io.BytesIO()
             fig_twd.savefig(buf, format='png', dpi=200, bbox_inches='tight')
             st.download_button("Download TWD plot (PNG)", data=buf.getvalue(), file_name="twd_vs_tws.png", mime="image/png")
@@ -279,8 +285,12 @@ if uploaded_file:
             seg_floor=float(segment_label_floor),
             show_total_labels=show_total_labels,
             total_floor=float(ring_label_floor),
+            xtick_step_deg=int(xtick_step),
         )
         st.pyplot(fig_twa)
+        buf2 = io.BytesIO()
+        fig_twa.savefig(buf2, format='png', dpi=200, bbox_inches='tight')
+        st.download_button("Download TWA plot (PNG)", data=buf2.getvalue(), file_name="twa_vs_tws.png", mime="image/png")
         buf2 = io.BytesIO()
         fig_twa.savefig(buf2, format='png', dpi=200, bbox_inches='tight')
         st.download_button("Download TWA plot (PNG)", data=buf2.getvalue(), file_name="twa_vs_tws.png", mime="image/png")
@@ -290,42 +300,47 @@ if uploaded_file:
         st.subheader("TWS/TWD Time Series")
         fig, ax1 = plt.subplots(figsize=(16, 9))
 
-        # sort by time to ensure proper lines
-        dft = df.sort_values(time_col)
+        # sort by time and break on large gaps to avoid diagonal spans
+        import matplotlib.dates as mdates
+
+        dft = df.sort_values(time_col).copy()
+        # Break lines on gaps
+        if time_col and pd.api.types.is_datetime64_any_dtype(dft[time_col]):
+            dft["_gap_s"] = dft[time_col].diff().dt.total_seconds()
+            gap_sec = int(gap_minutes * 60)
+            dft.loc[dft["_gap_s"] > gap_sec, ["Tws", "Twd°M"]] = np.nan
+
         ax1.plot(dft[time_col], dft["Tws"], label='TWS')
         ax1.set_ylabel("TWS (kt)")
 
-        for x, y in zip(dft[time_col], dft["Tws"]):
-            if pd.notna(y):
+        # Label only every Nth point for readability
+        for i, (x, y) in enumerate(zip(dft[time_col], dft["Tws"])):
+            if pd.notna(y) and (i % int(label_every) == 0):
                 ax1.text(x, y, f"{int(round(y))}", fontsize=7, va='bottom')
 
         ax2 = ax1.twinx()
         if dft["Twd°M"].notna().any():
             ax2.plot(dft[time_col], dft["Twd°M"], label='TWD')
             ax2.set_ylabel("TWD (°)")
-            for x, y in zip(dft[time_col], dft["Twd°M"]):
-                if pd.notna(y):
+            for i, (x, y) in enumerate(zip(dft[time_col], dft["Twd°M"])):
+                if pd.notna(y) and (i % int(label_every) == 0):
                     ax2.text(x, y, f"{int(round(y))}", fontsize=7, va='top')
         else:
             ax2.set_ylabel("TWD (°)")
 
-        # marks (first column containing 'mark')
+        # Nicely formatted time axis
+        locator = mdates.AutoDateLocator(minticks=5, maxticks=10)
+        formatter = mdates.ConciseDateFormatter(locator)
+        ax1.xaxis.set_major_locator(locator)
+        ax1.xaxis.set_major_formatter(formatter)
+        fig.autofmt_xdate()
+
+        # marks (first column containing 'mark'), only on value changes and spaced apart
         mark_col = first_col_containing(dft, ["mark"])
         if mark_col:
-            last_mark = None
-            y_top = ax1.get_ylim()[1]
-            for t, m in zip(dft[time_col], dft[mark_col]):
-                if pd.notna(m) and m != last_mark:
-                    ax1.axvline(t, linestyle='--', alpha=0.4)
-                    ax1.text(t, y_top, str(m), rotation=90, va='top', ha='right', fontsize=8)
-                    last_mark = m
-
-        title_str = f"TWS/TWD Time Series\n{start_time} to {end_time}"
-        if model_name:
-            title_str += f"\n Model: {model_name}"
-        plt.title(title_str)
-        fig.tight_layout()
-        st.pyplot(fig)
+            last_t = None
+            min_spacing = pd.Timedelta(minutes=max(15, gap_minutes // 4))
+            y_top = ax1.get_yli
         buf3 = io.BytesIO()
         fig.savefig(buf3, format='png', dpi=200, bbox_inches='tight')
         st.download_button("Download time series (PNG)", data=buf3.getvalue(), file_name="tws_twd_timeseries.png", mime="image/png")
