@@ -4,216 +4,343 @@ import numpy as np
 import matplotlib.pyplot as plt
 import io
 import csv
+from datetime import timezone
 
 st.set_page_config(layout="wide")
 st.title("Expedition Wind Analysis")
 
-# === Upload CSV ===
+# === Sidebar controls ===
+st.sidebar.header("Settings")
+ws_max = st.sidebar.number_input("Max TWS bin (kt)", min_value=8, max_value=80, value=36, step=4)
+ws_step = st.sidebar.number_input("TWS bin step (kt)", min_value=2, max_value=10, value=4, step=1)
+dir_step = st.sidebar.number_input("Direction bin step (°)", min_value=5, max_value=45, value=10, step=5)
+show_bar_labels = st.sidebar.checkbox("Show segment % labels", value=True)
+segment_label_floor = st.sidebar.slider("Label segments above (%)", 0, 10, 1)
+show_total_labels = st.sidebar.checkbox("Show ring total % labels", value=True)
+ring_label_floor = st.sidebar.slider("Label totals above (%)", 0, 20, 4)
+
+# === CSV uploader ===
 uploaded_file = st.file_uploader("Upload Expedition routing CSV", type="csv")
 
-if uploaded_file:
-    # Read CSV robustly
-    rows = []
-    reader = csv.reader(io.StringIO(uploaded_file.getvalue().decode("utf-8")), delimiter=',', quotechar='"')
+# --- helpers ---
+@st.cache_data(show_spinner=False)
+def read_csv_to_df(file_bytes: bytes) -> tuple[pd.DataFrame, list[list[str]]]:
+    rows: list[list[str]] = []
+    text = file_bytes.decode("utf-8", errors="ignore")
+    reader = csv.reader(io.StringIO(text), delimiter=",", quotechar='"')
     for row in reader:
         rows.append(row)
-
+    if not rows:
+        return pd.DataFrame(), rows
     header = rows[0]
     data_rows = [row for row in rows[1:] if len(row) == len(header)]
     df = pd.DataFrame(data_rows, columns=header)
+    return df, rows
 
-    # === Parse fields ===
-    df["Twa"] = pd.to_numeric(df.get("Twa", np.nan), errors="coerce")
-    df["Tws"] = pd.to_numeric(df.get("Tws", np.nan), errors="coerce")
 
-    # Detect TWD column
-    twd_col_candidates = [col for col in df.columns if "twd" in col.lower()]
-    if twd_col_candidates:
-        twd_col = twd_col_candidates[0]
-        df["Twd°M"] = pd.to_numeric(df[twd_col], errors="coerce")
+def first_col_containing(df: pd.DataFrame, substrings: list[str]):
+    substrings = [s.lower() for s in substrings]
+    for col in df.columns:
+        low = col.lower()
+        if any(s in low for s in substrings):
+            return col
+    return None
+
+
+def detect_model(rows: list[list[str]]) -> str:
+    # Look for a row that has a cell with 'model' and a value next to it
+    for row in rows:
+        cells = [c.strip() for c in row if c and c.strip()]
+        if not cells:
+            continue
+        # forms like ["Model", "AROME 2.5km"] or ["Routing model:", "ECMWF 9km"]
+        for i, c in enumerate(cells[:-1]):
+            if "model" in c.lower():
+                return cells[i+1]
+    return ""
+
+
+def parse_numeric(df: pd.DataFrame, col: str) -> pd.Series:
+    return pd.to_numeric(df.get(col, np.nan), errors="coerce")
+
+
+def format_timerange(ts: pd.Series) -> tuple[str, str]:
+    if ts.isna().all():
+        return "?", "?"
+    start = pd.to_datetime(ts.min(), errors="coerce")
+    end = pd.to_datetime(ts.max(), errors="coerce")
+    if pd.isna(start) or pd.isna(end):
+        return "?", "?"
+    return start.strftime("%d-%b-%Y %H:%M"), end.strftime("%d-%b-%Y %H:%M")
+
+
+# Polar stack helper reused by both TWD and TWA plots
+
+def wind_polar(df: pd.DataFrame, angle_col: str, speed_col: str, angle_bins_deg: int, ws_max: int, ws_step: int,
+               zero_at: str, theta_direction_ccw: bool, title_prefix: str,
+               time_range: tuple[str, str], model_name: str,
+               show_segment_labels: bool, seg_floor: float,
+               show_total_labels: bool, total_floor: float):
+
+    # bins and labels
+    dir_bins = np.arange(0, 360 + angle_bins_deg, angle_bins_deg)
+    if dir_bins[-1] != 360:
+        dir_bins[-1] = 360
+    angles = np.deg2rad((dir_bins[:-1] + dir_bins[1:]) / 2)
+
+    tws_bins = np.arange(0, ws_max + ws_step, ws_step)
+    tws_labels = [f"{tws_bins[i]}–{tws_bins[i+1]} kt" for i in range(len(tws_bins) - 1)]
+
+    dfx = df.copy()
+    if angle_col == "Twa":
+        # Normalize TWA to [-180, 180)
+        dfx[angle_col] = ((dfx[angle_col] + 180) % 360) - 180
+        # convert to [0, 360) for binning then back to centered ticks for labels
+        dir_vals = (dfx[angle_col] + 180) % 360
     else:
-        st.warning("No TWD column found in the CSV.")
-        df["Twd°M"] = np.nan
+        dir_vals = dfx[angle_col] % 360
 
-    df = df.dropna(subset=["Twa", "Twd°M", "Tws"])
+    dfx["dir_bin"] = pd.cut(dir_vals, bins=dir_bins, labels=False, include_lowest=True)
+    dfx["tws_bin"] = pd.cut(dfx[speed_col], bins=tws_bins, labels=tws_labels, include_lowest=True)
 
-    # === Time info ===
-    time_col = next((col for col in df.columns if "time" in col.lower()), None)
-    if time_col:
-        df[time_col] = pd.to_datetime(df[time_col], errors="coerce")
-        start_time = df[time_col].min().strftime("%d-%b-%Y %H:%M")
-        end_time = df[time_col].max().strftime("%d-%b-%Y %H:%M")
-    else:
-        start_time = end_time = "?"
+    counts = dfx.groupby(["dir_bin", "tws_bin"]).size().unstack(fill_value=0)
+    percentages = counts.reindex(index=np.arange(len(dir_bins) - 1), fill_value=0)
+    total = percentages.values.sum()
+    if total == 0:
+        total = 1
+    percentages = percentages / total * 100
 
-    # === Model info from rows ===
-    model_row = next((row for row in rows if any("model" in cell.lower() for cell in row if cell.strip())), None)
-    model_name = ""
-    if model_row:
-        non_empty_cells = [cell.strip() for cell in model_row if cell.strip()]
-        if len(non_empty_cells) > 1:
-            model_name = non_empty_cells[1]
+    total_percent = percentages.sum(axis=1).values
+    max_percent = float(np.nanmax(total_percent)) if len(total_percent) else 0.0
+    ylim = int(np.ceil((max_percent + 2) / 2.0) * 2) if max_percent > 0 else 2
+    rgrid_ticks = list(range(2, ylim + 1, 2))
 
-    # === Helper: plot TWD ===
-    def plot_twd(df):
-        dir_bins = np.arange(0, 361, 10)
-        angles = np.deg2rad((dir_bins[:-1] + dir_bins[1:]) / 2)
+    # Color ramp (8+ discrete shades). Cycling is fine if many bins.
+    colors = [
+        "#bde0fe", "#a2d2ff", "#90e0ef", "#48cae4",
+        "#00b4d8", "#0096c7", "#0077b6", "#023e8a",
+        "#03045e",
+    ]
 
-        tws_bins = np.arange(0, 36, 4)
-        tws_labels = [f"{tws_bins[i]}–{tws_bins[i+1]} kt" for i in range(len(tws_bins)-1)]
-
-        df = df.copy()
-        df["dir_bin"] = pd.cut(df["Twd°M"] % 360, bins=dir_bins, labels=False, include_lowest=True)
-        df["tws_bin"] = pd.cut(df["Tws"], bins=tws_bins, labels=tws_labels, include_lowest=True)
-
-        counts = df.groupby(["dir_bin", "tws_bin"]).size().unstack(fill_value=0)
-        percentages = counts.reindex(index=np.arange(len(dir_bins)-1), fill_value=0)
-        percentages = percentages / percentages.values.sum() * 100
-
-        total_percent = percentages.sum(axis=1).values
-        max_percent = np.ceil((total_percent).max())
-        ylim = int(np.ceil((max_percent + 2) / 2.0) * 2)
-        rgrid_ticks = list(range(2, ylim + 1, 2))
-        colors = ["#add8e6", "#9bddde", "#7fcdbb", "#66c2a5", "#90ee90", "#f0e68c", "#ffcccb", "#ffcc99"]
-
-        fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(8, 7))
+    fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(8, 7))
+    if zero_at.upper().startswith("N"):
         ax.set_theta_zero_location("N")
-        ax.set_theta_direction(-1)
-
-        width = np.deg2rad(10)
-        bottom = np.zeros(len(angles))
-        for i, label in enumerate(tws_labels):
-            heights = percentages[label].values if label in percentages.columns else np.zeros(len(angles))
-            ax.bar(angles, heights, width=width, bottom=bottom,
-                   color=colors[i % len(colors)], edgecolor='black', linewidth=0.5, label=label)
-            bottom += heights
-
-        bottom = np.zeros(len(angles))
-        for i, label in enumerate(tws_labels):
-            heights = percentages[label].values if label in percentages.columns else np.zeros(len(angles))
-            for angle, h, b in zip(angles, heights, bottom):
-                if h >= 1:
-                    ax.text(angle, b + h / 2, f"{int(round(h))}%", ha='center', va='center', fontsize=8)
-            bottom += heights
-
-        for angle, total in zip(angles, total_percent):
-            if total >= 4:
-                ax.text(angle, total + 1, f"{int(round(total))}%", ha='center', va='bottom', fontsize=9, fontweight='bold')
-
-        ax.set_xticks(np.deg2rad(np.arange(0, 360, 30)))
-        ax.set_xticklabels([f"{d}°" for d in range(0, 360, 30)])
-        ax.set_rgrids(rgrid_ticks, angle=90)
-        ax.set_ylim(0, ylim)
-        title_str = f"TWD vs TWS (% Time Sailed)\n{start_time} to {end_time}"
-        if model_name:
-            title_str += f"\n Model: {model_name}"
-        ax.set_title(title_str, va='bottom')
-        ax.legend(title="TWS", loc="upper right", bbox_to_anchor=(1.2, 1.02))
-        return fig
-
-    # === Helper: plot TWA ===
-    def plot_twa(df):
-        bins = np.linspace(-180, 180, 37)
-        angles = np.deg2rad((bins[:-1] + bins[1:]) / 2)
-
-        tws_bins = np.arange(0, 36, 4)
-        tws_labels = [f"{tws_bins[i]}–{tws_bins[i+1]} kt" for i in range(len(tws_bins)-1)]
-
-        df = df.copy()
-        df["twa_bin"] = pd.cut(df["Twa"], bins=bins, labels=False, include_lowest=True)
-        df["tws_bin"] = pd.cut(df["Tws"], bins=tws_bins, labels=tws_labels, include_lowest=True)
-
-        counts = df.groupby(["twa_bin", "tws_bin"]).size().unstack(fill_value=0)
-        percentages = counts.reindex(index=np.arange(len(bins)-1), fill_value=0)
-        percentages = percentages / percentages.values.sum() * 100
-
-        total_percent = percentages.sum(axis=1).values
-        max_percent = np.ceil((total_percent).max())
-        ylim = int(np.ceil((max_percent + 2) / 2.0) * 2)
-        rgrid_ticks = list(range(2, ylim + 1, 2))
-        colors = ["#add8e6", "#9bddde", "#7fcdbb", "#66c2a5", "#90ee90", "#f0e68c", "#ffcccb", "#ffcc99"]
-
-        fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(8, 7))
+    elif zero_at.upper().startswith("S"):
         ax.set_theta_zero_location("S")
-        ax.set_theta_direction(-1)
+    elif zero_at.upper().startswith("E"):
+        ax.set_theta_zero_location("E")
+    else:
+        ax.set_theta_zero_location("W")
 
-        width = np.deg2rad(10)
-        bottom = np.zeros(len(angles))
-        for i, label in enumerate(tws_labels):
-            heights = percentages[label].values if label in percentages.columns else np.zeros(len(angles))
-            ax.bar(angles, heights, width=width, bottom=bottom,
-                   color=colors[i % len(colors)], edgecolor='black', linewidth=0.5, label=label)
-            bottom += heights
+    ax.set_theta_direction(-1 if theta_direction_ccw else 1)
 
+    width = np.deg2rad(angle_bins_deg)
+    bottom = np.zeros(len(angles))
+    for i, label in enumerate(tws_labels):
+        heights = percentages[label].values if label in percentages.columns else np.zeros(len(angles))
+        ax.bar(angles, heights, width=width, bottom=bottom,
+               color=colors[i % len(colors)], edgecolor='black', linewidth=0.5, label=label)
+        bottom += heights
+
+    if show_segment_labels:
         bottom = np.zeros(len(angles))
         for i, label in enumerate(tws_labels):
             heights = percentages[label].values if label in percentages.columns else np.zeros(len(angles))
             for angle, h, b in zip(angles, heights, bottom):
-                if h >= 1:
+                if h >= seg_floor:
                     ax.text(angle, b + h / 2, f"{int(round(h))}%", ha='center', va='center', fontsize=8)
             bottom += heights
 
-        for angle, total in zip(angles, total_percent):
-            if total >= 4:
-                ax.text(angle, total + 1, f"{int(round(total))}%", ha='center', va='bottom', fontsize=9, fontweight='bold')
+    if show_total_labels:
+        for angle, tot in zip(angles, total_percent):
+            if tot >= total_floor:
+                ax.text(angle, tot + 1, f"{int(round(tot))}%", ha='center', va='bottom', fontsize=9, fontweight='bold')
 
+    # Ticks
+    if angle_col == "Twa":
         tick_angles = np.arange(0, 361, 30)
         tick_labels = [f"{int(x - 180)}°" for x in tick_angles]
         ax.set_xticks(np.deg2rad(tick_angles))
         ax.set_xticklabels(tick_labels)
-        ax.set_rgrids(rgrid_ticks, angle=90)
-        ax.set_ylim(0, ylim)
-        title_str = f"TWA vs TWS (% Time Sailed)\n{start_time} to {end_time}"
-        if model_name:
-            title_str += f"\n Model: {model_name}"
-        ax.set_title(title_str, va='bottom')
-        ax.legend(title="TWS", loc="upper right", bbox_to_anchor=(1.2, 1.02))
-        return fig
+    else:
+        ax.set_xticks(np.deg2rad(np.arange(0, 360, 30)))
+        ax.set_xticklabels([f"{d}°" for d in range(0, 360, 30)])
 
-    col1, col2 = st.columns(2)
+    ax.set_rgrids(rgrid_ticks, angle=90)
+    ax.set_ylim(0, ylim)
+
+    start_time, end_time = time_range
+    title_str = f"{title_prefix} (% Time Sailed)\n{start_time} to {end_time}"
+    if model_name:
+        title_str += f"\n Model: {model_name}"
+    ax.set_title(title_str, va='bottom')
+    ax.legend(title="TWS", loc="upper right", bbox_to_anchor=(1.25, 1.02))
+    fig.tight_layout()
+    return fig
+
+
+if uploaded_file:
+    # === Load ===
+    df_raw, rows = read_csv_to_df(uploaded_file.getvalue())
+    if df_raw.empty:
+        st.warning("CSV appears empty after parsing.")
+        st.stop()
+
+    # --- Column detection ---
+    # Standardize key fields
+    df = df_raw.copy()
+
+    # Number fields
+    if "Twa" not in df.columns:
+        twa_col = first_col_containing(df, ["twa"]) or "Twa"
+        if twa_col not in df.columns:
+            st.error("No TWA column found.")
+            st.stop()
+        df.rename(columns={twa_col: "Twa"}, inplace=True)
+
+    if "Tws" not in df.columns:
+        tws_col = first_col_containing(df, ["tws", "wind speed"]) or "Tws"
+        if tws_col not in df.columns:
+            st.error("No TWS column found.")
+            st.stop()
+        df.rename(columns={tws_col: "Tws"}, inplace=True)
+
+    twd_col = first_col_containing(df, ["twd", "true wind dir"])  # Expedition variants
+    if twd_col:
+        df.rename(columns={twd_col: "Twd°M"}, inplace=True)
+    else:
+        df["Twd°M"] = np.nan
+        st.warning("No TWD column found in the CSV.")
+
+    # Numeric coercion
+    df["Twa"] = parse_numeric(df, "Twa")
+    df["Tws"] = parse_numeric(df, "Tws")
+    df["Twd°M"] = parse_numeric(df, "Twd°M")
+
+    # Time column
+    time_col = first_col_containing(df, ["time", "utc", "date"])  # handles e.g. "TimeUTC"
+    if time_col:
+        df[time_col] = pd.to_datetime(df[time_col], errors="coerce")
+        start_time, end_time = format_timerange(df[time_col])
+    else:
+        start_time = end_time = "?"
+
+    # Model
+    model_name = detect_model(rows)
+
+    # Drop rows with essential NaNs
+    df = df.dropna(subset=["Twa", "Tws"])  # allow Twd°M NaN for TWA plot
+
+    # === Layout ===
+    col1, col2 = st.columns(2, gap="large")
+
     with col1:
         st.subheader("TWD vs TWS")
-        st.pyplot(plot_twd(df))
+        if df["Twd°M"].notna().any():
+            fig_twd = wind_polar(
+                df.dropna(subset=["Twd°M"]),
+                angle_col="Twd°M",
+                speed_col="Tws",
+                angle_bins_deg=int(dir_step),
+                ws_max=int(ws_max),
+                ws_step=int(ws_step),
+                zero_at="N",
+                theta_direction_ccw=True,
+                title_prefix="TWD vs TWS",
+                time_range=(start_time, end_time),
+                model_name=model_name,
+                show_segment_labels=show_bar_labels,
+                seg_floor=float(segment_label_floor),
+                show_total_labels=show_total_labels,
+                total_floor=float(ring_label_floor),
+            )
+            st.pyplot(fig_twd)
+            buf = io.BytesIO()
+            fig_twd.savefig(buf, format='png', dpi=200, bbox_inches='tight')
+            st.download_button("Download TWD plot (PNG)", data=buf.getvalue(), file_name="twd_vs_tws.png", mime="image/png")
+        else:
+            st.info("Cannot plot TWD vs TWS without a TWD column.")
 
     with col2:
         st.subheader("TWA vs TWS")
-        st.pyplot(plot_twa(df))
+        fig_twa = wind_polar(
+            df,
+            angle_col="Twa",
+            speed_col="Tws",
+            angle_bins_deg=int(dir_step),
+            ws_max=int(ws_max),
+            ws_step=int(ws_step),
+            zero_at="S",
+            theta_direction_ccw=True,
+            title_prefix="TWA vs TWS",
+            time_range=(start_time, end_time),
+            model_name=model_name,
+            show_segment_labels=show_bar_labels,
+            seg_floor=float(segment_label_floor),
+            show_total_labels=show_total_labels,
+            total_floor=float(ring_label_floor),
+        )
+        st.pyplot(fig_twa)
+        buf2 = io.BytesIO()
+        fig_twa.savefig(buf2, format='png', dpi=200, bbox_inches='tight')
+        st.download_button("Download TWA plot (PNG)", data=buf2.getvalue(), file_name="twa_vs_tws.png", mime="image/png")
 
-    # === Time Series Plot ===
+    # === TWS/TWD Time Series ===
     if time_col:
+        st.subheader("TWS/TWD Time Series")
         fig, ax1 = plt.subplots(figsize=(16, 9))
 
-        ax1.plot(df[time_col], df["Tws"], color='blue', label='TWS')
-        ax1.set_ylabel("TWS (kt)", color='blue')
-        ax1.tick_params(axis='y', labelcolor='blue')
+        # sort by time to ensure proper lines
+        dft = df.sort_values(time_col)
+        ax1.plot(dft[time_col], dft["Tws"], label='TWS')
+        ax1.set_ylabel("TWS (kt)")
 
-        for x, y in zip(df[time_col], df["Tws"]):
-            ax1.text(x, y, f"{int(round(y))}", color='blue', fontsize=7, va='bottom')
+        for x, y in zip(dft[time_col], dft["Tws"]):
+            if pd.notna(y):
+                ax1.text(x, y, f"{int(round(y))}", fontsize=7, va='bottom')
 
         ax2 = ax1.twinx()
-        ax2.plot(df[time_col], df["Twd°M"], color='red', label='TWD')
-        ax2.set_ylabel("TWD (°)", color='red')
-        ax2.tick_params(axis='y', labelcolor='red')
+        if dft["Twd°M"].notna().any():
+            ax2.plot(dft[time_col], dft["Twd°M"], label='TWD')
+            ax2.set_ylabel("TWD (°)")
+            for x, y in zip(dft[time_col], dft["Twd°M"]):
+                if pd.notna(y):
+                    ax2.text(x, y, f"{int(round(y))}", fontsize=7, va='top')
+        else:
+            ax2.set_ylabel("TWD (°)")
 
-        for x, y in zip(df[time_col], df["Twd°M"]):
-            ax2.text(x, y, f"{int(round(y))}", color='red', fontsize=7, va='top')
-
-        # Plot vertical lines for marks if present
-        mark_cols = [col for col in df.columns if "mark" in col.lower()]
-        if mark_cols:
-            mark_col = mark_cols[0]
+        # marks (first column containing 'mark')
+        mark_col = first_col_containing(dft, ["mark"])
+        if mark_col:
             last_mark = None
-            for t, m in zip(df[time_col], df[mark_col]):
+            y_top = ax1.get_ylim()[1]
+            for t, m in zip(dft[time_col], dft[mark_col]):
                 if pd.notna(m) and m != last_mark:
-                    ax1.axvline(t, color='gray', linestyle='--', alpha=0.5)
-                    ax1.text(t, ax1.get_ylim()[1], str(m), rotation=90, va='top', ha='right', fontsize=8)
+                    ax1.axvline(t, linestyle='--', alpha=0.4)
+                    ax1.text(t, y_top, str(m), rotation=90, va='top', ha='right', fontsize=8)
                     last_mark = m
 
-        title_str = "TWS/TWD Time Series"
-        title_str += f"\n{start_time} to {end_time}"
+        title_str = f"TWS/TWD Time Series\n{start_time} to {end_time}"
         if model_name:
             title_str += f"\n Model: {model_name}"
         plt.title(title_str)
+        fig.tight_layout()
         st.pyplot(fig)
+        buf3 = io.BytesIO()
+        fig.savefig(buf3, format='png', dpi=200, bbox_inches='tight')
+        st.download_button("Download time series (PNG)", data=buf3.getvalue(), file_name="tws_twd_timeseries.png", mime="image/png")
+
+    # === Optional: table of TWA vs TWS bins ===
+    st.subheader("TWA × TWS distribution (% of time)")
+    # Build the same bins used in plots for consistency
+    twa_bins_edges = np.linspace(-180, 180, int(360/dir_step) + 1)
+    tws_bins_edges = np.arange(0, ws_max + ws_step, ws_step)
+    dftab = df.copy()
+    dftab['TWA_bin'] = pd.cut(dftab['Twa'], bins=twa_bins_edges, include_lowest=True)
+    dftab['TWS_bin'] = pd.cut(dftab['Tws'], bins=tws_bins_edges, include_lowest=True)
+    ct = pd.crosstab(dftab['TWA_bin'], dftab['TWS_bin'])
+    pct = ct / ct.values.sum() * 100
+    st.dataframe(pct.style.format("{:.1f}"))
+
 else:
     st.info("Upload a CSV file to begin.")
