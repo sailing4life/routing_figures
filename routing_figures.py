@@ -383,17 +383,6 @@ if uploaded_file:
         fig.savefig(buf3, format='png', dpi=200, bbox_inches='tight')
         st.download_button("Download time series (PNG)", data=buf3.getvalue(), file_name="tws_twd_timeseries.png", mime="image/png")
 
-    # === Optional: table of TWA vs TWS bins ===
-    st.subheader("TWA × TWS distribution (% of time)")
-    # Build the same bins used in plots for consistency
-    twa_bins_edges = np.linspace(-180, 180, int(360/dir_step) + 1)
-    tws_bins_edges = np.arange(0, ws_max + ws_step, ws_step)
-    dftab = df.copy()
-    dftab['TWA_bin'] = pd.cut(dftab['Twa'], bins=twa_bins_edges, include_lowest=True)
-    dftab['TWS_bin'] = pd.cut(dftab['Tws'], bins=tws_bins_edges, include_lowest=True)
-    ct = pd.crosstab(dftab['TWA_bin'], dftab['TWS_bin'])
-    pct = ct / ct.values.sum() * 100
-    st.dataframe(pct.style.format("{:.1f}"))
 
 else:
     st.info("Upload a CSV file to begin.")
